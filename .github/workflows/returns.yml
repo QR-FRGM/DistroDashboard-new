@@ -1,0 +1,66 @@
+name: Hourly Run Distribution of Returns and Streamlit plots display
+
+on:
+  workflow_call: #when called in the master workflow file
+  workflow_dispatch: #allows manual triggering of the workflow. Helps in debugging.
+
+jobs:
+  run-python:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3  # Use v3 for the latest version
+      with:
+        fetch-depth: 1  # Fetch only the latest changes
+
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.12.2'  # Use the specific version of Python you need
+
+    - name: Restore cached Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: python-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          python-${{ runner.os }}-
+
+    - name: Install dependencies
+      run: pip install --no-cache-dir -r requirements.txt 
+
+    - name: Save cache after installing dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: python-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+        
+    - name: Run Python script
+      run: python returns_main.py  # Replace with your actual Python script name
+
+    - name: Configure Git user
+      run: |
+        git config --global user.name "siddharthapatoliyafibonacciresearch"  # Replace with your name
+        git config --global user.email "siddharthapatoliya@fibonacciresearch.in"  # Replace with your email
+
+    - name: Pull latest changes to avoid conflicts
+      run: |
+        git fetch origin main
+        git stash
+        git pull --rebase origin main || echo "No updates available"
+        git stash pop || echo "No stashed changes"
+  
+    - name: Check if folder has files and commit changes
+      run: |
+        if [ -d "Intraday_data_files_processed_folder_pq" ] && [ "$(ls -A Intraday_data_files_processed_folder_pq)" ]; then
+          echo "Folder exists and contains files — proceeding to commit"
+          git add .
+          git diff --cached --quiet || git commit -m "Update processed parquet files"
+          git push origin main
+        else
+          echo "Folder does not exist or is empty — skipping commit"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
